@@ -179,7 +179,7 @@ void setup()
   pinMode(ledPin, OUTPUT);
   pinMode(intPin, INPUT);
 
-  attachInterrupt(0, on_change, RISING);
+  attachInterrupt(intPin, on_change, RISING);
 
   Serial.begin(9600);
 
