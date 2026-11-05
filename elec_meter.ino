@@ -22,143 +22,9 @@
 
 // set pin numbers:
 const int ledPin = 13;
-const int intPin = 2;
-
-#define BIT_PERIOD 416 // us
-#define BIT_MARGIN 10 // us
-
-  /*
-   *  Buffer
-   */
-
-#define BUFF_SIZE 128
+const int intPin = 3;
 
 #include "elster.h"
-
-
-  /*
-   *  Called on every InfraRed pulse, ie. every '1' bit.
-   */
-
-typedef unsigned long stamp;
-
-static stamp last_us;
-
-#define BITS(t) (((t) + (BIT_PERIOD/2)) / BIT_PERIOD)
-
-static struct Buffer bits;
-
-void on_change(void)
-{
-  //  push the number of bit periods since the last interrupt to a buffer.
-  const stamp us = micros();
-  const int diff = us - last_us;
-  last_us = us;
-
-  const int bit_periods = BITS(diff);
-  buff_add(& bits, bit_periods);
-}
-
-  /*
-   *  Decode bit stream
-   */
-
-static struct Buffer bytes;
-
-static int bit_data;
-static int bit_index;
-
-int add_bit(int state)
-{
-    bit_data >>= 1;
-
-    if (state)
-        bit_data += 0x200;
-
-    if (bit_data)
-        bit_index += 1;
-
-    if (bit_index < 10)
-        return 0;
-
-    if (bit_data & 1) // start bit
-    {
-        if (!state) // stop bit
-        {
-            const int d = (bit_data >> 1) & 0xFF;
-            // high represents '0', so invert the bits
-            buff_add(& bytes, (d ^ 0xFF));
-            bit_data = bit_index = 0;
-            return 1;
-        }
-    }
-
-    //  bad frame
-    bit_data = bit_index = 0;
-    return 0;
-}
-
-static void on_timeout()
-{
-  // too long since last bits count
-  
-  if (bit_index)
-    while (bit_data) // flush with trailing '0' bits
-      add_bit(0);  
-  bit_data = bit_index = 0;
-}
-
-static void on_bits(int bits)
-{
-  // called on each bits count.
-  // the bit periods represent a '1' followed by N '0's.
-
-  if (bits < 1)
-  {
-    on_timeout();
-    return;
-  }
-
-  // the elapsed bit periods since last interrupt
-  // represents a '1' followed by 0 or more '0's.  
-  add_bit(1);
-  for (; bits > 1; bits--)
-    add_bit(0);
-}
-
-  /*
-   *
-   */
-   
-static int decode_bit_stream(void)
-{
-  // look for a pause in the bit stream
-  const stamp us = micros();
-  const int diff = us - last_us;
-  if (BITS(diff) > 20)
-    on_timeout();
-
-  // read the bit stream  
-  int bit_count;
-  if (buff_get(& bits, & bit_count) < 0)
-    return -1;
-
-  on_bits(bit_count);
-
-  // read the byte stream decoded above
-  int byte_data;
-  if (buff_get(& bytes, & byte_data) < 0)
-    return -1;
-
-  return byte_data;
-}
-
-typedef void (*on_reading)(unsigned long reading);
-
-
-  /*
-   *
-   */
 
 void meter_reading(unsigned long reading)
 {
@@ -173,26 +39,22 @@ ElsterA100C meter(meter_reading);
 
 void setup() 
 {
-  buff_init(& bits);
-  buff_init(& bytes);
-
-  pinMode(ledPin, OUTPUT);
-  pinMode(intPin, INPUT);
-
-  attachInterrupt(intPin, on_change, RISING);
 
   Serial.begin(9600);
 
   Serial.println("ready");
+
+  meter.init(1);
 }
 
 void loop()
 {
-  int byte_data = decode_bit_stream();
-  if (byte_data == -1)
-    return;
-
-  meter.on_data(byte_data);
+  // Decode the meter stream
+  const int byte_data = meter.decode_bit_stream();
+  if (byte_data != -1)
+  {
+    meter.on_data(byte_data);
+  }
 }
 
 // FIN
