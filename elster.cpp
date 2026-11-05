@@ -27,7 +27,7 @@
   #include <pins_arduino.h>
 #endif
 
-#include <elster.h>
+#include "elster.h"
 
 #define BIT_PERIOD 416 // us
 
